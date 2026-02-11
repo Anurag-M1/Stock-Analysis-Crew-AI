@@ -6,6 +6,7 @@ It collects market/news context, reviews financial signals and SEC filings, then
 ## Author
 - **Anurag Kumar Singh**
 - GitHub: [Anurag-M1](https://github.com/anurag-m1)
+- live : https://stock-analysis-crew-ai.vercel.app
 
 ## What This Project Includes
 - Multi-agent stock analysis workflow
