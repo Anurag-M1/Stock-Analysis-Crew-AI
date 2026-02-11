@@ -5,7 +5,7 @@ It collects market/news context, reviews financial signals and SEC filings, then
 
 ## Author
 - **Anurag Kumar Singh**
-- GitHub: [anurag-m1](https://github.com/anurag-m1)
+- GitHub: [Anurag-M1](https://github.com/anurag-m1)
 
 ## What This Project Includes
 - Multi-agent stock analysis workflow
