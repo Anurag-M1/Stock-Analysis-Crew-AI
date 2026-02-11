@@ -1,0 +1,33 @@
+financial_analysis:
+  description: >
+    Analyze {company_stock} financial health and market performance.
+    Cover valuation, growth, profitability, leverage, and peer comparison.
+    Use concise evidence and avoid long narrative.
+
+  expected_output: >
+    Short financial assessment with strengths, weaknesses, and key metrics.
+
+research:
+  description: >
+    Collect recent news and market sentiment for {company_stock}.
+    Highlight major events, analyst tone, and near-term catalysts like earnings.
+    Use at most 3 search calls.
+
+  expected_output: >
+    Bullet summary of recent developments and likely impact on {company_stock}.
+
+filings_analysis:
+  description: >
+    Analyze latest 10-Q and 10-K for {company_stock}.
+    Focus on MD&A, guidance, risks, and notable accounting or cash-flow signals.
+
+  expected_output: >
+    Concise filing findings with red flags and positive indicators.
+
+recommend:
+  description: >
+    Combine research, financial, and filing insights into one recommendation.
+    Include stance (buy/hold/sell), key reasons, risks, and near-term catalysts.
+
+  expected_output: > 
+    Final recommendation report in concise sections with clear action and confidence.
