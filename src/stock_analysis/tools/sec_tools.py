@@ -1,202 +1,126 @@
 import os
 import re
-from typing import Any, Optional, Type
+from typing import Optional, Type
 
 import html2text
 import requests
-from crewai_tools import RagTool
+from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 from sec_api import QueryApi
 
 
-def _rag_config() -> dict:
-    # Use /tmp-compatible storage for serverless environments like Vercel.
-    return {
-        "embedding_model": {"provider": "onnx"},
-        "vectordb": {
-            "provider": "chromadb",
-            "config": {"dir": os.getenv("RAG_DB_DIR", "/tmp/stock-analysis-db")},
-        },
-    }
-
-
-class FixedSEC10KToolSchema(BaseModel):
+class SECFilingSearchSchema(BaseModel):
     search_query: str = Field(
-        ..., description="Mandatory query you would like to search from the 10-K report"
+        ..., description="What you want to find in the filing (risks, cash flow, etc)."
     )
-
-
-class SEC10KToolSchema(FixedSEC10KToolSchema):
     stock_name: str = Field(
-        ..., description="Mandatory valid stock name you would like to search"
+        default="", description="Ticker symbol. Optional if COMPANY_STOCK is set."
     )
 
 
-class SEC10KTool(RagTool):
-    name: str = "Search in the specified 10-K form"
-    description: str = (
-        "A tool that can be used to semantic search a query from a 10-K form for a specified company."
-    )
-    args_schema: Type[BaseModel] = SEC10KToolSchema
-    collection_name: str = "sec_10k_onnx_collection"
+class _SECFilingTool(BaseTool):
+    form_type: str = ""
+    args_schema: Type[BaseModel] = SECFilingSearchSchema
     _max_chars: int = 1200
 
-    def __init__(self, stock_name: Optional[str] = None, **kwargs):
-        kwargs.setdefault("config", _rag_config())
-        super().__init__(**kwargs)
-        if stock_name is not None:
-            content = self.get_10k_url_content(stock_name)
-            if content:
-                self.add(content)
-                self.description = (
-                    "A tool that can be used to semantic search a query from "
-                    f"{stock_name}'s latest 10-K SEC form content."
-                )
-                self.args_schema = FixedSEC10KToolSchema
-                self._generate_description()
+    def _run(self, search_query: str, stock_name: str = "") -> str:
+        ticker = (stock_name or os.getenv("COMPANY_STOCK", "")).strip().upper()
+        if not ticker:
+            return "Ticker is required. Provide `stock_name` or set COMPANY_STOCK."
 
-    def get_10k_url_content(self, stock_name: str) -> Optional[str]:
+        api_key = os.getenv("SEC_API_API_KEY", "").strip()
+        if not api_key:
+            return "SEC_API_API_KEY is missing."
+
+        filing = self._get_latest_filing(ticker, api_key)
+        if not filing:
+            return f"No {self.form_type} filing found for {ticker}."
+
+        filing_url = filing.get("linkToFilingDetails", "")
+        if not filing_url:
+            return f"{self.form_type} filing found for {ticker}, but filing URL is missing."
+
+        text = self._fetch_filing_text(filing_url)
+        if not text:
+            return f"Unable to fetch {self.form_type} filing text for {ticker}."
+
+        snippet = self._extract_relevant_snippet(text, search_query)
+        response = (
+            f"Ticker: {ticker}\n"
+            f"Form: {self.form_type}\n"
+            f"Filed At: {filing.get('filedAt', 'N/A')}\n"
+            f"Source: {filing_url}\n\n"
+            f"Relevant Content:\n{snippet}"
+        )
+        if len(response) > self._max_chars:
+            return response[: self._max_chars] + "\n\n[truncated]"
+        return response
+
+    def _get_latest_filing(self, ticker: str, api_key: str) -> Optional[dict]:
         try:
-            query_api = QueryApi(api_key=os.environ["SEC_API_API_KEY"])
+            query_api = QueryApi(api_key=api_key)
             query = {
                 "query": {
                     "query_string": {
-                        "query": f'ticker:{stock_name} AND formType:"10-K"'
+                        "query": f'ticker:{ticker} AND formType:"{self.form_type}"'
                     }
                 },
                 "from": "0",
                 "size": "1",
                 "sort": [{"filedAt": {"order": "desc"}}],
             }
-            filings = query_api.get_filings(query)["filings"]
-            if len(filings) == 0:
-                print("No filings found for this stock.")
-                return None
-
-            url = filings[0]["linkToFilingDetails"]
-            headers = {
-                "User-Agent": "crewai.com bisan@crewai.com",
-                "Accept-Encoding": "gzip, deflate",
-                "Host": "www.sec.gov",
-            }
-            response = requests.get(url, headers=headers, timeout=30)
-            response.raise_for_status()
-            h = html2text.HTML2Text()
-            h.ignore_links = False
-            text = h.handle(response.content.decode("utf-8"))
-            text = re.sub(r"[^a-zA-Z$0-9\s\n]", "", text)
-            return text
-        except requests.exceptions.HTTPError as e:
-            print(f"HTTP error occurred: {e}")
-            return None
-        except Exception as e:
-            print(f"Error fetching 10-K URL: {e}")
+            filings = query_api.get_filings(query).get("filings", [])
+            return filings[0] if filings else None
+        except Exception:
             return None
 
-    def add(self, *args: Any, **kwargs: Any) -> None:
-        kwargs["data_type"] = "text"
-        super().add(*args, **kwargs)
-
-    def _run(
-        self, search_query: str, stock_name: Optional[str] = None, **kwargs: Any
-    ) -> Any:
-        if stock_name:
-            content = self.get_10k_url_content(stock_name)
-            if content:
-                self.add(content)
-        kwargs.pop("stock_name", None)
-        raw = super()._run(query=search_query, limit=1, **kwargs)
-        if isinstance(raw, str) and len(raw) > self._max_chars:
-            return raw[: self._max_chars] + "\n\n[truncated]"
-        return raw
-
-
-class FixedSEC10QToolSchema(BaseModel):
-    search_query: str = Field(
-        ..., description="Mandatory query you would like to search from the 10-Q report"
-    )
-
-
-class SEC10QToolSchema(FixedSEC10QToolSchema):
-    stock_name: str = Field(
-        ..., description="Mandatory valid stock name you would like to search"
-    )
-
-
-class SEC10QTool(RagTool):
-    name: str = "Search in the specified 10-Q form"
-    description: str = (
-        "A tool that can be used to semantic search a query from a 10-Q form for a specified company."
-    )
-    args_schema: Type[BaseModel] = SEC10QToolSchema
-    collection_name: str = "sec_10q_onnx_collection"
-    _max_chars: int = 1200
-
-    def __init__(self, stock_name: Optional[str] = None, **kwargs):
-        kwargs.setdefault("config", _rag_config())
-        super().__init__(**kwargs)
-        if stock_name is not None:
-            content = self.get_10q_url_content(stock_name)
-            if content:
-                self.add(content)
-                self.description = (
-                    "A tool that can be used to semantic search a query from "
-                    f"{stock_name}'s latest 10-Q SEC form content."
-                )
-                self.args_schema = FixedSEC10QToolSchema
-                self._generate_description()
-
-    def get_10q_url_content(self, stock_name: str) -> Optional[str]:
+    def _fetch_filing_text(self, filing_url: str) -> Optional[str]:
         try:
-            query_api = QueryApi(api_key=os.environ["SEC_API_API_KEY"])
-            query = {
-                "query": {
-                    "query_string": {
-                        "query": f'ticker:{stock_name} AND formType:"10-Q"'
-                    }
-                },
-                "from": "0",
-                "size": "1",
-                "sort": [{"filedAt": {"order": "desc"}}],
-            }
-            filings = query_api.get_filings(query)["filings"]
-            if len(filings) == 0:
-                print("No filings found for this stock.")
-                return None
-
-            url = filings[0]["linkToFilingDetails"]
             headers = {
-                "User-Agent": "crewai.com bisan@crewai.com",
+                "User-Agent": "stock-analysis-crew-ai contact@example.com",
                 "Accept-Encoding": "gzip, deflate",
                 "Host": "www.sec.gov",
             }
-            response = requests.get(url, headers=headers, timeout=30)
+            response = requests.get(filing_url, headers=headers, timeout=30)
             response.raise_for_status()
-            h = html2text.HTML2Text()
-            h.ignore_links = False
-            text = h.handle(response.content.decode("utf-8"))
-            text = re.sub(r"[^a-zA-Z$0-9\s\n]", "", text)
+            converter = html2text.HTML2Text()
+            converter.ignore_links = True
+            text = converter.handle(response.text)
+            text = re.sub(r"\s+", " ", text).strip()
             return text
-        except requests.exceptions.HTTPError as e:
-            print(f"HTTP error occurred: {e}")
-            return None
-        except Exception as e:
-            print(f"Error fetching 10-Q URL: {e}")
+        except Exception:
             return None
 
-    def add(self, *args: Any, **kwargs: Any) -> None:
-        kwargs["data_type"] = "text"
-        super().add(*args, **kwargs)
+    def _extract_relevant_snippet(self, text: str, query: str) -> str:
+        lower_text = text.lower()
+        terms = [t.lower() for t in re.findall(r"[a-zA-Z0-9]{3,}", query)]
+        best_index = -1
 
-    def _run(
-        self, search_query: str, stock_name: Optional[str] = None, **kwargs: Any
-    ) -> Any:
-        if stock_name:
-            content = self.get_10q_url_content(stock_name)
-            if content:
-                self.add(content)
-        kwargs.pop("stock_name", None)
-        raw = super()._run(query=search_query, limit=1, **kwargs)
-        if isinstance(raw, str) and len(raw) > self._max_chars:
-            return raw[: self._max_chars] + "\n\n[truncated]"
-        return raw
+        for term in terms[:8]:
+            idx = lower_text.find(term)
+            if idx != -1 and (best_index == -1 or idx < best_index):
+                best_index = idx
+
+        if best_index == -1:
+            return text[:900]
+
+        start = max(0, best_index - 250)
+        end = min(len(text), best_index + 850)
+        return text[start:end]
+
+
+class SEC10QTool(_SECFilingTool):
+    name: str = "search_in_the_specified_10_q_form"
+    description: str = (
+        "Search relevant information in the latest SEC 10-Q filing for a ticker."
+    )
+    form_type: str = "10-Q"
+
+
+class SEC10KTool(_SECFilingTool):
+    name: str = "search_in_the_specified_10_k_form"
+    description: str = (
+        "Search relevant information in the latest SEC 10-K filing for a ticker."
+    )
+    form_type: str = "10-K"
+

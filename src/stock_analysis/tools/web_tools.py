@@ -2,12 +2,11 @@ import os
 import re
 from urllib.parse import quote
 import xml.etree.ElementTree as ET
-from typing import Any, Optional
+from typing import Optional
 
 import html2text
 import requests
 from crewai.tools import BaseTool
-from crewai_tools import SerperDevTool
 
 
 class BraveSearchAliasTool(BaseTool):
@@ -15,7 +14,6 @@ class BraveSearchAliasTool(BaseTool):
     description: str = (
         "Search the web for recent information. Input must be a `query` string."
     )
-    _serper: SerperDevTool = SerperDevTool()
     _max_chars: int = 700
     _serper_enabled: Optional[bool] = None
 
@@ -26,7 +24,7 @@ class BraveSearchAliasTool(BaseTool):
         lines = [f"Query: {query}"]
         if self._serper_available():
             try:
-                result = self._serper._run(search_query=query)
+                result = self._serper_search(query)
                 organic = result.get("organic", [])[:3]
                 if organic:
                     lines.append("Top web results:")
@@ -84,6 +82,17 @@ class BraveSearchAliasTool(BaseTool):
             self._serper_enabled = False
 
         return self._serper_enabled
+
+    def _serper_search(self, query: str) -> dict:
+        key = os.getenv("SERPER_API_KEY", "").strip()
+        response = requests.post(
+            "https://google.serper.dev/search",
+            headers={"X-API-KEY": key, "Content-Type": "application/json"},
+            json={"q": query},
+            timeout=20,
+        )
+        response.raise_for_status()
+        return response.json()
 
     def _fallback_search(self, query: str) -> list[str]:
         lines = []
