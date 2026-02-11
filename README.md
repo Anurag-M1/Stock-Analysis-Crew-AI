@@ -3,6 +3,8 @@
 Stock analysis project built with CrewAI.
 It collects market/news context, reviews financial signals and SEC filings, then generates an investment recommendation.
 
+<img width="1309" height="718" alt="Stock Crew AI" src="https://github.com/user-attachments/assets/5e5a2c3d-2cf9-4ddc-8c89-96e286f0c433" />
+
 ## Author
 - **Anurag Kumar Singh**
 - GitHub: [Anurag-M1](https://github.com/anurag-m1)
