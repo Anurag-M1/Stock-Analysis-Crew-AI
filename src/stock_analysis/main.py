@@ -2,31 +2,23 @@ import sys
 import os
 
 try:
-    from .crew import StockAnalysisCrew
+    from .service import run_analysis
 except ImportError:
-    from crew import StockAnalysisCrew
+    from service import run_analysis
 
 def run():
     ticker = os.getenv("COMPANY_STOCK", "AMZN")
-    inputs = {
-        "query": "What is the company you want to analyze?",
-        "company_stock": ticker,
-    }
-    return StockAnalysisCrew().crew().kickoff(inputs=inputs)
+    return run_analysis(ticker)
 
 def train():
     """
-    Train the crew for a given number of iterations.
+    Kept for compatibility.
     """
-    inputs = {
-        "query": "What is last years revenue",
-        "company_stock": os.getenv("COMPANY_STOCK", "AMZN"),
-    }
+    ticker = os.getenv("COMPANY_STOCK", "AMZN")
     try:
-        StockAnalysisCrew().crew().train(n_iterations=int(sys.argv[1]), inputs=inputs)
-
+        print(run_analysis(ticker))
     except Exception as e:
-        raise Exception(f"An error occurred while training the crew: {e}")
+        raise Exception(f"An error occurred while running analysis: {e}")
     
 if __name__ == "__main__":
     print("## Welcome to Stock Analysis Crew")

@@ -1,26 +1,14 @@
 import os
 import re
-from typing import Optional, Type
+from typing import Optional
 
 import html2text
 import requests
-from crewai.tools import BaseTool
-from pydantic import BaseModel, Field
 from sec_api import QueryApi
 
 
-class SECFilingSearchSchema(BaseModel):
-    search_query: str = Field(
-        ..., description="What you want to find in the filing (risks, cash flow, etc)."
-    )
-    stock_name: str = Field(
-        default="", description="Ticker symbol. Optional if COMPANY_STOCK is set."
-    )
-
-
-class _SECFilingTool(BaseTool):
+class _SECFilingTool:
     form_type: str = ""
-    args_schema: Type[BaseModel] = SECFilingSearchSchema
     _max_chars: int = 1200
 
     def _run(self, search_query: str, stock_name: str = "") -> str:
@@ -123,4 +111,3 @@ class SEC10KTool(_SECFilingTool):
         "Search relevant information in the latest SEC 10-K filing for a ticker."
     )
     form_type: str = "10-K"
-

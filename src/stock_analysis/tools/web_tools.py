@@ -6,10 +6,9 @@ from typing import Optional
 
 import html2text
 import requests
-from crewai.tools import BaseTool
 
 
-class BraveSearchAliasTool(BaseTool):
+class BraveSearchAliasTool:
     name: str = "brave_search"
     description: str = (
         "Search the web for recent information. Input must be a `query` string."
@@ -151,7 +150,7 @@ class BraveSearchAliasTool(BaseTool):
         return lines
 
 
-class ReadWebsiteContentAliasTool(BaseTool):
+class ReadWebsiteContentAliasTool:
     name: str = "read_website_content"
     description: str = (
         "Fetch readable text from a webpage URL. Input must be a `website_url` string."

@@ -9,7 +9,7 @@ SRC_DIR = ROOT_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from stock_analysis.crew import StockAnalysisCrew
+from stock_analysis.service import run_analysis
 
 app = Flask(__name__, static_folder=str(ROOT_DIR), static_url_path="")
 
@@ -40,13 +40,8 @@ def analyze():
     if not ticker:
         return jsonify({"ok": False, "error": "ticker is required"}), 400
 
-    inputs = {
-        "query": "What is the company you want to analyze?",
-        "company_stock": ticker,
-    }
-
     try:
-        result = StockAnalysisCrew().crew().kickoff(inputs=inputs)
+        result = run_analysis(ticker)
         return jsonify({"ok": True, "ticker": ticker, "report": str(result)})
     except Exception as exc:
         return jsonify({"ok": False, "ticker": ticker, "error": str(exc)}), 500
