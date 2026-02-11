@@ -75,4 +75,4 @@ poetry run python src/stock_analysis/main.py
 ## Notes
 - If port `5000` is busy, run on another port (example: `PORT=5050`).
 - `USE_SERPER=false` keeps search on fallback mode if Serper key is not working.
-- Never commit real API keys.
+
